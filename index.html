@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF‑8">
+  <meta name="viewport" content="width=device‑width, initial‑scale=1">
+  <title>🖱 Emojiclick2001 Ultra</title>
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: linear-gradient(to right,#e0eafc,#cfdef3);
+      margin:0; padding:20px;
+      transition: background 1s;
+      position: relative;
+      overflow-x: hidden;
+    }
+    #emoji {
+      font-size:100px;
+      cursor:pointer;
+      transition: transform 0.1s;
+    }
+    #emoji:active {
+      transform: scale(1.2);
+    }
+    .upgrades, .emoji-shop, .extras {
+      margin-top:20px;
+    }
+    button {
+      margin:5px; padding:10px 15px; font-size:1rem;
+      cursor:pointer;
+    }
+    .active-bonus {
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.3); }
+    }
+    #popContainer {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      width: 300px;
+      pointer-events: none;
+    }
+    .popMessage {
+      background: rgba(173,216,230,0.9);
+      color: #000;
+      padding: 5px 10px;
+      border-radius: 15px;
+      margin-top: 5px;
+      font-weight: bold;
+      animation: floatPop 1.5s forwards;
+    }
+    @keyframes floatPop {
+      0% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-50px); }
+    }
+    #nameInputContainer {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      text-align: right;
+    }
+    #playerNameDisplay {
+      font‑weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<div id="nameInputContainer">
+  Name: <input type="text" id="playerNameInput" placeholder="Dein Name">
+  <button id="setNameBtn">OK</button>
+  <div>Spieler: <span id="playerNameDisplay">‑</span></div>
+</div>
+
+<h1>🖱 Emojiclick2001 Ultra</h1>
+<p>Klicke auf das Emoji!</p>
+<div id="emoji">😀</div>
+<p>Punkte: <span id="score">0</span></p>
+<p>Power: <span id="power">1</span></p>
+<p>Stufe: <span id="level">1</span> (noch <span id="nextLevel">1000</span> Punkte bis zur nächsten Stufe)</p>
+
+<div class="upgrades">
+  <h2>Power‑Upgrades</h2>
+  <button id="upg1">⚡ +1 Power (10 Punkte)</button>
+  <button id="upg2">💥 +10 Power (100 Punkte)</button>
+  <button id="upg3">🔥 +100 Power (1.000 Punkte)</button>
+  <button id="upg4">🌋 +1000 Power (10.000 Punkte)</button>
+</div>
+
+<div class="emoji-shop">
+  <h2>Emoji‑Shop</h2>
+  <button id="emoji1">😎 Cool Emoji (50 Punkte)</button>
+  <button id="emoji2">🐱 Cat Emoji (200 Punkte)</button>
+  <button id="emoji3">🐉 Dragon Emoji (1.000 Punkte)</button>
+  <button id="emoji4">👑 King Emoji (5.000 Punkte)</button>
+</div>
+
+<div class="extras">
+  <h2>Extras</h2>
+  <button id="autoClicker">🤖 Auto‑Clicker kaufen (100 Punkte)</button>
+  <button id="booster">⚡ Booster +2 Power für 10s (500 Punkte)</button>
+  <button id="megaClicker">💥 Mega Clicker (+2 Klick pro Klick, 1000 Punkte)</button>
+  <button id="timeBooster">⏱ Zeit‑Booster +5 Power 15s (1500 Punkte)</button>
+  <button id="luckyEvent">🍀 Lucky Event für 30s (2000 Punkte)</button>
+</div>
+
+<div id="popContainer"></div>
+
+<button id="save">💾 Score hochladen</button>
+<button id="leaderboard">🏆 Leaderboard anzeigen</button>
+<button id="reset">🔁 Zurücksetzen</button>
+
+<footer style="margin-top:2rem; font-size:0.9rem;">
+  Erstellt von <strong>Professor Filou</strong> 💻
+</footer>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js"></script>
+
+<script>
+  // Firebase Config
+  const firebaseConfig = {
+    apiKey: "AIzaSyBvqSoOtv54Vy-rp99WJl5zf2_c7_KpCuQ",
+    authDomain: "emojiclickleaderboard.firebaseapp.com",
+    projectId: "emojiclickleaderboard",
+    storageBucket: "emojiclickleaderboard.firebasestorage.app",
+    messagingSenderId: "451233920345",
+    appId: "1:451233920345:web:3c11f6bba538e312230848",
+    databaseURL: "https://emojiclickleaderboard-default-rtdb.firebaseio.com"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // Spiel‑Variablen
+  let playerName = "";
+  let score = 0, power = 1, level = 1, emojiChar = "😀", doublePowerActive = false;
+  let autoClickerLevel = 0, autoClickerInterval = null;
+  let megaClickerActive = false, luckyEventActive = false;
+  let localLeaderboard = [];  // entfällt, da Realtime DB genutzt
+
+  const emoji = document.getElementById("emoji");
+  const scoreDisplay = document.getElementById("score");
+  const powerDisplay = document.getElementById("power");
+  const levelDisplay = document.getElementById("level");
+  const nextLevelDisplay = document.getElementById("nextLevel");
+  const popContainer = document.getElementById("popContainer");
+  const playerNameInput = document.getElementById("playerNameInput");
+  const setNameBtn = document.getElementById("setNameBtn");
+  const playerNameDisplay = document.getElementById("playerNameDisplay");
+
+  // Name setzen
+  setNameBtn.onclick = () => {
+    const name = playerNameInput.value.trim();
+    if (name.length === 0) {
+      alert("Bitte gib einen Namen ein!");
+      return;
+    }
+    playerName = name;
+    playerNameDisplay.textContent = playerName;
+    showPop("🎮 Willkommen, "+playerName+"!");
+  };
+
+  // Pop‑Wolken Funktion
+  function showPop(text){
+    const pop = document.createElement("div");
+    pop.className = "popMessage";
+    pop.textContent = text;
+    popContainer.appendChild(pop);
+    setTimeout(()=>{ pop.remove(); }, 1500);
+  }
+
+  // Update Anzeigen
+  function update(){
+    scoreDisplay.textContent = score;
+    powerDisplay.textContent = power + (megaClickerActive? "+2":"");
+    levelDisplay.textContent = level;
+    nextLevelDisplay.textContent = Math.max(0, level*1000 - score);
+  }
+
+  // Level‑System
+  function checkLevel(){
+    const newLevel = Math.floor(score/1000) + 1;
+    if(newLevel !== level){
+      level = newLevel;
+      showPop("🎉 Du bist jetzt Stufe "+level+"!");
+      changeBackground();
+      update();
+    }
+  }
+
+  // Hintergrund wechseln
+  function changeBackground(){
+    const colors = ["#e0eafc,#cfdef3","#ffecd2,#fcb69f","#a1c4fd,#c2e9fb","#fddb92,#d1fdff","#ff9a9e,#fecfef"];
+    const bg = colors[level % colors.length];
+    document.body.style.background = `linear-gradient(to right, ${bg})`;
+  }
+
+  // Random Events
+  function triggerRandomEvent(){
+    if(luckyEventActive){
+      if(Math.random() < 0.1){
+        const bonus = Math.floor(Math.random()*50) + 20;
+        score += bonus;
+        showPop("🍀 Lucky Bonus! +"+bonus+" Punkte!");
+      }
+    } else {
+      const chance = Math.random();
+      if(chance < 0.03){
+        const bonus = Math.floor(Math.random()*20) + 10;
+        score += bonus;
+        showPop("🎉 Bonus +"+bonus+" Punkte!");
+      } else if(chance < 0.05){
+        const malus = Math.floor(Math.random()*10) + 5;
+        score = Math.max(0, score - malus);
+        showPop("💀 Unglück! -"+malus+" Punkte!");
+      } else if(chance < 0.06 && !doublePowerActive){
+        doublePowerActive = true;
+        power *= 2;
+        showPop("⚡ DOPPEL POWER 10s");
+        emoji.classList.add("active-bonus");
+        setTimeout(()=>{
+          power = Math.floor(power/2);
+          doublePowerActive = false;
+          emoji.classList.remove("active-bonus");
+          update();
+        },10000);
+      }
+    }
+    update();
+  }
+
+  // Speicher
+  function saveGame(){
+    const saveData = { score, power, emojiChar, level, autoClickerLevel, megaClickerActive, luckyEventActive };
+    localStorage.setItem("emojiclickSave", JSON.stringify(saveData));
+  }
+  function loadGame(){
+    const save = JSON.parse(localStorage.getItem("emojiclickSave"));
+    if(save){
+      score = save.score;
+      power = save.power;
+      emojiChar = save.emojiChar;
+      level = save.level || 1;
+      autoClickerLevel = save.autoClickerLevel || 0;
+      megaClickerActive = save.megaClickerActive || false;
+      luckyEventActive = save.luckyEventActive || false;
+      emoji.textContent = emojiChar;
+      update();
+      changeBackground();
+      startAutoClicker();
+    }
+  }
+  function resetGame(){
+    if(confirm("Willst du dein Spiel wirklich zurücksetzen?")){
+      localStorage.removeItem("emojiclickSave");
+      score = 0; power = 1; level = 1;
+      emojiChar = "😀";
+      autoClickerLevel = 0; megaClickerActive = false; luckyEventActive = false;
+      emoji.textContent = emojiChar;
+      changeBackground();
+      update();
+      stopAutoClicker();
+    }
+  }
+
+  // Klick‑Logik
+  emoji.onclick = () => {
+    score += power + (megaClickerActive ? 2 : 0);
+    update();
+    checkLevel();
+    saveGame();
+    triggerRandomEvent();
+  };
+
+  // Upgrades & Shop Buttons
+  document.getElementById("upg1").onclick = () => {
+    if(score >= 10){
+      score -= 10; power += 1; showPop("⚡ +1 Power gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("upg2").onclick = () => {
+    if(score >= 100){
+      score -=100; power +=10; showPop("💥 +10 Power gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("upg3").onclick = () => {
+    if(score >= 1000){
+      score -=1000; power +=100; showPop("🔥 +100 Power gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("upg4").onclick = () => {
+    if(score >= 10000){
+      score -=10000; power +=1000; showPop("🌋 +1000 Power gekauft!"); update(); saveGame();
+    }
+  };
+
+  document.getElementById("emoji1").onclick = () => {
+    if(score >= 50){
+      score -=50; emojiChar="😎"; emoji.textContent=emojiChar; showPop("😎 Emoji gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("emoji2").onclick = () => {
+    if(score >= 200){
+      score -=200; emojiChar="🐱"; emoji.textContent=emojiChar; showPop("🐱 Emoji gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("emoji3").onclick = () => {
+    if(score >= 1000){
+      score -=1000; emojiChar="🐉"; emoji.textContent=emojiChar; showPop("🐉 Emoji gekauft!"); update(); saveGame();
+    }
+  };
+  document.getElementById("emoji4").onclick = () => {
+    if(score >= 5000){
+      score -=5000; emojiChar="👑"; emoji.textContent=emojiChar; showPop("👑 Emoji gekauft!"); update(); saveGame();
+    }
+  };
+
+  // Extras
+  function startAutoClicker(){
+    if(autoClickerLevel > 0 && !autoClickerInterval){
+      autoClickerInterval = setInterval(()=>{
+        score += (power + (megaClickerActive ? 2 : 0)) * autoClickerLevel;
+        update();
+        checkLevel();
+        saveGame();
+      }, 1000);
+    }
+  }
+  function stopAutoClicker(){
+    if(autoClickerInterval){
+      clearInterval(autoClickerInterval);
+      autoClickerInterval = null;
+    }
+  }
+  document.getElementById("autoClicker").onclick = () => {
+    const cost = 100 * (autoClickerLevel + 1);
+    if(score >= cost){
+      score -= cost;
+      autoClickerLevel++;
+      showPop("🤖 Auto‑Clicker gekauft! Level: "+autoClickerLevel);
+      update();
+      saveGame();
+      startAutoClicker();
+    }
+  };
+  document.getElementById("booster").onclick = () => {
+    const cost = 500;
+    if(score >= cost){
+      score -= cost;
+      update();
+      saveGame();
+      power += 2;
+      showPop("⚡ Booster aktiv! +2 Power für 10s");
+      setTimeout(()=>{
+        power -=2;
+        update();
+      }, 10000);
+    }
+  };
+  document.getElementById("megaClicker").onclick = () => {
+    if(score >= 1000){
+      score -=1000;
+      megaClickerActive = true;
+      showPop("💥 Mega Clicker aktiviert!");
+      update();
+      saveGame();
+    }
+  };
+  document.getElementById("timeBooster").onclick = () => {
+    if(score >= 1500){
+      score -=1500;
+      power +=5;
+      showPop("⏱ Zeit‑Booster aktiv! +5 Power für 15s");
+      update();
+      saveGame();
+      setTimeout(()=>{
+        power -=5;
+        update();
+      }, 15000);
+    }
+  };
+  document.getElementById("luckyEvent").onclick = () => {
+    if(score >= 2000){
+      score -=2000;
+      luckyEventActive = true;
+      showPop("🍀 Lucky Event aktiviert für 30s");
+      update();
+      saveGame();
+      setTimeout(()=>{
+        luckyEventActive = false;
+        showPop("🍀 Lucky Event vorbei!");
+        update();
+      }, 30000);
+    }
+  };
+
+  // Leaderboard mit Firebase
+  document.getElementById("save").onclick = () => {
+    if(playerName === ""){
+      alert("Bitte zuerst deinen Namen eingeben!");
+      return;
+    }
+    const entry = { name: playerName, score: score, date: new Date().toISOString() };
+    db.ref("leaderboard").push(entry);
+    showPop("💾 Score hochgeladen!");
+  };
+  document.getElementById("leaderboard").onclick = () => {
+    db.ref("leaderboard").orderByChild("score").limitToLast(10).once("value", snapshot => {
+      const data = snapshot.val();
+      if(!data){
+        showPop("Noch keine Scores vorhanden!");
+        return;
+      }
+      const arr = Object.values(data);
+      arr.sort((a,b)=>b.score - a.score);
+      let text = "🏆 Leaderboard 🏆\n\n";
+      arr.forEach((entry,i) => {
+        text += `${i+1}. ${entry.name}: ${entry.score} Punkte\n`;
+      });
+      alert(text);
+    });
+  };
+
+  document.getElementById("reset").onclick = resetGame;
+
+  loadGame();
+  update();
+</script>
+
+</body>
+</html>
